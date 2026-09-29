@@ -1,8 +1,10 @@
 import streamlit as st
+from supabase import create_client, Client
 
-# ==========================================
+
+# =========================================================
 # PAGE SETTINGS
-# ==========================================
+# =========================================================
 
 st.set_page_config(
     page_title="GlowUp",
@@ -10,9 +12,23 @@ st.set_page_config(
     layout="wide"
 )
 
-# ==========================================
-# CUSTOM STYLE
-# ==========================================
+
+# =========================================================
+# SUPABASE CONNECTION
+# =========================================================
+
+SUPABASE_URL = st.secrets["SUPABASE_URL"]
+SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
+
+supabase: Client = create_client(
+    SUPABASE_URL,
+    SUPABASE_KEY
+)
+
+
+# =========================================================
+# DESIGN
+# =========================================================
 
 st.markdown("""
 <style>
@@ -74,9 +90,15 @@ h1, h2, h3 {
 """, unsafe_allow_html=True)
 
 
-# ==========================================
-# SESSION DATA
-# ==========================================
+# =========================================================
+# SESSION STATE
+# =========================================================
+
+if "user" not in st.session_state:
+    st.session_state.user = None
+
+if "data_loaded" not in st.session_state:
+    st.session_state.data_loaded = False
 
 if "profile" not in st.session_state:
     st.session_state.profile = {
@@ -126,13 +148,347 @@ if "mood" not in st.session_state:
     }
 
 
-# ==========================================
+# =========================================================
+# HELPER FUNCTIONS
+# =========================================================
+
+def get_user_id():
+    return st.session_state.user.id
+
+
+def load_user_data():
+
+    user_id = get_user_id()
+
+    # ---------------- PROFILE ----------------
+    result = (
+        supabase
+        .table("profile")
+        .select("*")
+        .eq("user_id", user_id)
+        .limit(1)
+        .execute()
+    )
+
+    if result.data:
+        row = result.data[0]
+
+        st.session_state.profile = {
+            "name": row.get("name", "") or "",
+            "age": row.get("age", "") or "",
+            "height": row.get("height", "") or "",
+            "weight": row.get("weight", "") or "",
+            "goal": row.get("goal", "") or ""
+        }
+
+    # ---------------- SKINCARE ----------------
+    result = (
+        supabase
+        .table("skincare")
+        .select("*")
+        .eq("user_id", user_id)
+        .limit(1)
+        .execute()
+    )
+
+    if result.data:
+        row = result.data[0]
+
+        st.session_state.skincare = {
+            "cleanser": bool(row.get("cleanser", False)),
+            "moisturizer": bool(row.get("moisturizer", False)),
+            "sunscreen": bool(row.get("sunscreen", False)),
+            "serum": bool(row.get("serum", False))
+        }
+
+    # ---------------- HAIRCARE ----------------
+    result = (
+        supabase
+        .table("haircare")
+        .select("*")
+        .eq("user_id", user_id)
+        .limit(1)
+        .execute()
+    )
+
+    if result.data:
+        row = result.data[0]
+
+        st.session_state.haircare = {
+            "hair_oil": bool(row.get("hair_oil", False)),
+            "hair_wash": bool(row.get("hair_wash", False)),
+            "shampoo": bool(row.get("shampoo", False)),
+            "conditioner": bool(row.get("conditioner", False))
+        }
+
+    # ---------------- WATER ----------------
+    result = (
+        supabase
+        .table("water")
+        .select("*")
+        .eq("user_id", user_id)
+        .limit(1)
+        .execute()
+    )
+
+    if result.data:
+        st.session_state.water = int(
+            result.data[0].get("glasses", 0) or 0
+        )
+
+    # ---------------- EXERCISE ----------------
+    result = (
+        supabase
+        .table("exercise")
+        .select("*")
+        .eq("user_id", user_id)
+        .limit(1)
+        .execute()
+    )
+
+    if result.data:
+        row = result.data[0]
+
+        st.session_state.exercise = {
+            "type": row.get("exercise_type", "") or "",
+            "duration": int(row.get("duration", 0) or 0),
+            "calories": int(row.get("calories", 0) or 0)
+        }
+
+    # ---------------- SLEEP ----------------
+    result = (
+        supabase
+        .table("sleep")
+        .select("*")
+        .eq("user_id", user_id)
+        .limit(1)
+        .execute()
+    )
+
+    if result.data:
+        row = result.data[0]
+
+        st.session_state.sleep = {
+            "hours": float(row.get("hours", 0) or 0),
+            "quality": row.get("quality", "") or ""
+        }
+
+    # ---------------- MOOD ----------------
+    result = (
+        supabase
+        .table("mood")
+        .select("*")
+        .eq("user_id", user_id)
+        .limit(1)
+        .execute()
+    )
+
+    if result.data:
+        row = result.data[0]
+
+        st.session_state.mood = {
+            "mood": row.get("mood", "") or "",
+            "note": row.get("note", "") or ""
+        }
+
+    st.session_state.data_loaded = True
+
+
+# =========================================================
+# LOGIN / SIGNUP
+# =========================================================
+
+if st.session_state.user is None:
+
+    st.markdown(
+        '<div class="glow-title">🌷 GlowUp</div>',
+        unsafe_allow_html=True
+    )
+
+    st.markdown(
+        '<div class="subtitle">Your personal self-care & wellness space ✨</div>',
+        unsafe_allow_html=True
+    )
+
+    st.markdown("---")
+
+    login_tab, signup_tab = st.tabs(
+        ["🔑 Login", "🌸 Create Account"]
+    )
+
+    # =====================================================
+    # LOGIN
+    # =====================================================
+
+    with login_tab:
+
+        st.subheader("Welcome back 🌷")
+
+        email = st.text_input(
+            "Email",
+            placeholder="Enter your email",
+            key="login_email"
+        )
+
+        password = st.text_input(
+            "Password",
+            type="password",
+            placeholder="Enter your password",
+            key="login_password"
+        )
+
+        if st.button("💗 Login", key="login_button"):
+
+            if not email or not password:
+                st.warning("Please enter your email and password.")
+
+            else:
+
+                try:
+
+                    response = supabase.auth.sign_in_with_password({
+                        "email": email,
+                        "password": password
+                    })
+
+                    if response.user:
+
+                        st.session_state.user = response.user
+                        st.session_state.data_loaded = False
+
+                        load_user_data()
+
+                        st.success("Welcome back! 🌷")
+
+                        st.rerun()
+
+                except Exception as e:
+
+                    st.error(
+                        "Login failed. Please check your email and password."
+                    )
+
+    # =====================================================
+    # SIGN UP
+    # =====================================================
+
+    with signup_tab:
+
+        st.subheader("Create your GlowUp account 🌸")
+
+        new_email = st.text_input(
+            "Email",
+            placeholder="Enter your email",
+            key="signup_email"
+        )
+
+        new_password = st.text_input(
+            "Password",
+            type="password",
+            placeholder="Create a password",
+            key="signup_password"
+        )
+
+        confirm_password = st.text_input(
+            "Confirm Password",
+            type="password",
+            placeholder="Enter password again",
+            key="confirm_password"
+        )
+
+        if st.button("🌷 Create Account", key="signup_button"):
+
+            if not new_email or not new_password:
+
+                st.warning(
+                    "Please enter an email and password."
+                )
+
+            elif new_password != confirm_password:
+
+                st.error(
+                    "Passwords do not match."
+                )
+
+            elif len(new_password) < 6:
+
+                st.error(
+                    "Password should contain at least 6 characters."
+                )
+
+            else:
+
+                try:
+
+                    response = supabase.auth.sign_up({
+                        "email": new_email,
+                        "password": new_password
+                    })
+
+                    if response.user:
+
+                        # If email confirmation is disabled,
+                        # Supabase gives us a session immediately.
+                        if response.session:
+
+                            st.session_state.user = response.user
+                            st.session_state.data_loaded = False
+
+                            load_user_data()
+
+                            st.success(
+                                "Account created successfully! 🌷"
+                            )
+
+                            st.rerun()
+
+                        else:
+
+                            st.success(
+                                "Account created! Please check your email "
+                                "to confirm your account, then login. 💗"
+                            )
+
+                except Exception as e:
+
+                    st.error(
+                        "Could not create account. "
+                        "The email may already be registered."
+                    )
+
+
+    st.stop()
+
+
+# =========================================================
+# LOAD DATA AFTER LOGIN
+# =========================================================
+
+if not st.session_state.data_loaded:
+
+    try:
+        load_user_data()
+
+    except Exception as e:
+
+        st.error(
+            "Could not load your data from Supabase."
+        )
+
+
+# =========================================================
 # SIDEBAR
-# ==========================================
+# =========================================================
 
 st.sidebar.markdown("# 🌷 GlowUp")
-
 st.sidebar.caption("self-care • wellness • you")
+
+st.sidebar.markdown("---")
+
+user_email = st.session_state.user.email
+
+st.sidebar.caption(f"Logged in as:")
+st.sidebar.write(user_email)
 
 st.sidebar.markdown("---")
 
@@ -151,31 +507,48 @@ page = st.sidebar.radio(
     ]
 )
 
+st.sidebar.markdown("---")
 
-# ==========================================
+if st.sidebar.button("🚪 Logout"):
+
+    try:
+        supabase.auth.sign_out()
+    except:
+        pass
+
+    st.session_state.user = None
+    st.session_state.data_loaded = False
+
+    st.rerun()
+
+
+# =========================================================
 # HOME
-# ==========================================
+# =========================================================
 
 if page == "🏠 Home":
 
     name = st.session_state.profile["name"]
 
-    if name:
-        greeting = f"Good morning, {name} 🌷"
-    else:
-        greeting = "Good morning, Beautiful 🌷"
+    greeting = (
+        f"Good morning, {name} 🌷"
+        if name
+        else "Good morning, Beautiful 🌷"
+    )
 
     st.markdown(
-        f'<div class="glow-title">{greeting}</div>',
+        '<div class="glow-title">' +
+        greeting +
+        '</div>',
         unsafe_allow_html=True
     )
 
     st.markdown(
-        '<div class="subtitle">A little self-care goes a long way ✨</div>',
+        '<div class="subtitle">'
+        'A little self-care goes a long way ✨'
+        '</div>',
         unsafe_allow_html=True
     )
-
-    st.write("")
 
     col1, col2 = st.columns(2)
 
@@ -208,9 +581,22 @@ if page == "🏠 Home":
             f"""
             <div class="card">
                 <h2>🌸 Today's Self-Care</h2>
-                <p>🧴 Skincare — {"Completed ✓" if skincare_done else "Not completed"}</p>
-                <p>💆 Haircare — {"Completed ✓" if haircare_done else "Not completed"}</p>
-                <p>🏋️ Exercise — {"Completed ✓" if exercise_done else "Not completed"}</p>
+
+                <p>
+                🧴 Skincare —
+                {"Completed ✓" if skincare_done else "Not completed"}
+                </p>
+
+                <p>
+                💆 Haircare —
+                {"Completed ✓" if haircare_done else "Not completed"}
+                </p>
+
+                <p>
+                🏋️ Exercise —
+                {"Completed ✓" if exercise_done else "Not completed"}
+                </p>
+
             </div>
             """,
             unsafe_allow_html=True
@@ -220,10 +606,11 @@ if page == "🏠 Home":
 
         sleep_hours = st.session_state.sleep["hours"]
 
-        if sleep_hours > 0:
-            sleep_text = f"{sleep_hours} hours"
-        else:
-            sleep_text = "No sleep recorded yet"
+        sleep_text = (
+            f"{sleep_hours} hours"
+            if sleep_hours > 0
+            else "No sleep recorded yet"
+        )
 
         st.markdown(
             f"""
@@ -237,10 +624,11 @@ if page == "🏠 Home":
 
         mood = st.session_state.mood["mood"]
 
-        if mood:
-            mood_text = mood
-        else:
-            mood_text = "No mood recorded yet"
+        mood_text = (
+            mood
+            if mood
+            else "No mood recorded yet"
+        )
 
         st.markdown(
             f"""
@@ -256,16 +644,18 @@ if page == "🏠 Home":
             """
             <div class="card">
                 <h2>✨ Little Reminder</h2>
-                <p>You deserve the same care you give to everyone else. 🌷</p>
+                <p>
+                You deserve the same care you give to everyone else. 🌷
+                </p>
             </div>
             """,
             unsafe_allow_html=True
         )
 
 
-# ==========================================
+# =========================================================
 # PROFILE
-# ==========================================
+# =========================================================
 
 elif page == "👤 My Profile":
 
@@ -313,20 +703,44 @@ elif page == "👤 My Profile":
 
     if st.button("💗 Save My Profile"):
 
-        st.session_state.profile = {
-            "name": name,
-            "age": age,
-            "height": height,
-            "weight": weight,
-            "goal": goal
-        }
+        try:
 
-        st.success("♡ Profile saved successfully!")
+            user_id = get_user_id()
+
+            supabase.table("profile").upsert(
+                {
+                    "user_id": user_id,
+                    "name": name,
+                    "age": age,
+                    "height": height,
+                    "weight": weight,
+                    "goal": goal
+                },
+                on_conflict="user_id"
+            ).execute()
+
+            st.session_state.profile = {
+                "name": name,
+                "age": age,
+                "height": height,
+                "weight": weight,
+                "goal": goal
+            }
+
+            st.success(
+                "♡ Profile saved permanently!"
+            )
+
+        except Exception as e:
+
+            st.error(
+                "Could not save profile."
+            )
 
 
-# ==========================================
+# =========================================================
 # SKINCARE
-# ==========================================
+# =========================================================
 
 elif page == "🧴 Skincare":
 
@@ -364,19 +778,42 @@ elif page == "🧴 Skincare":
 
     if st.button("💗 Save Skincare"):
 
-        st.session_state.skincare = {
-            "cleanser": cleanser,
-            "moisturizer": moisturizer,
-            "sunscreen": sunscreen,
-            "serum": serum
-        }
+        try:
 
-        st.success("♡ Skincare routine saved!")
+            user_id = get_user_id()
+
+            supabase.table("skincare").upsert(
+                {
+                    "user_id": user_id,
+                    "cleanser": cleanser,
+                    "moisturizer": moisturizer,
+                    "sunscreen": sunscreen,
+                    "serum": serum
+                },
+                on_conflict="user_id"
+            ).execute()
+
+            st.session_state.skincare = {
+                "cleanser": cleanser,
+                "moisturizer": moisturizer,
+                "sunscreen": sunscreen,
+                "serum": serum
+            }
+
+            st.success(
+                "♡ Skincare routine saved permanently!"
+            )
+
+        except Exception as e:
+
+            st.error(
+                "Could not save skincare."
+            )
 
 
-# ==========================================
+# =========================================================
 # HAIRCARE
-# ==========================================
+# =========================================================
 
 elif page == "💆 Haircare":
 
@@ -414,19 +851,42 @@ elif page == "💆 Haircare":
 
     if st.button("💗 Save Haircare"):
 
-        st.session_state.haircare = {
-            "hair_oil": hair_oil,
-            "hair_wash": hair_wash,
-            "shampoo": shampoo,
-            "conditioner": conditioner
-        }
+        try:
 
-        st.success("♡ Haircare routine saved!")
+            user_id = get_user_id()
+
+            supabase.table("haircare").upsert(
+                {
+                    "user_id": user_id,
+                    "hair_oil": hair_oil,
+                    "hair_wash": hair_wash,
+                    "shampoo": shampoo,
+                    "conditioner": conditioner
+                },
+                on_conflict="user_id"
+            ).execute()
+
+            st.session_state.haircare = {
+                "hair_oil": hair_oil,
+                "hair_wash": hair_wash,
+                "shampoo": shampoo,
+                "conditioner": conditioner
+            }
+
+            st.success(
+                "♡ Haircare routine saved permanently!"
+            )
+
+        except Exception as e:
+
+            st.error(
+                "Could not save haircare."
+            )
 
 
-# ==========================================
+# =========================================================
 # HYDRATION
-# ==========================================
+# =========================================================
 
 elif page == "💧 Hydration":
 
@@ -459,7 +919,24 @@ elif page == "💧 Hydration":
         if st.button("💧 Add 1 Glass"):
 
             if st.session_state.water < 8:
+
                 st.session_state.water += 1
+
+                try:
+
+                    supabase.table("water").upsert(
+                        {
+                            "user_id": get_user_id(),
+                            "glasses": st.session_state.water
+                        },
+                        on_conflict="user_id"
+                    ).execute()
+
+                except Exception:
+
+                    st.error(
+                        "Could not save hydration."
+                    )
 
             st.rerun()
 
@@ -468,17 +945,37 @@ elif page == "💧 Hydration":
         if st.button("↩️ Remove 1 Glass"):
 
             if st.session_state.water > 0:
+
                 st.session_state.water -= 1
+
+                try:
+
+                    supabase.table("water").upsert(
+                        {
+                            "user_id": get_user_id(),
+                            "glasses": st.session_state.water
+                        },
+                        on_conflict="user_id"
+                    ).execute()
+
+                except Exception:
+
+                    st.error(
+                        "Could not save hydration."
+                    )
 
             st.rerun()
 
     if st.session_state.water >= 8:
-        st.success("🎉 Daily water goal completed!")
+
+        st.success(
+            "🎉 Daily water goal completed!"
+        )
 
 
-# ==========================================
+# =========================================================
 # EXERCISE
-# ==========================================
+# =========================================================
 
 elif page == "🏋️ Exercise":
 
@@ -494,33 +991,21 @@ elif page == "🏋️ Exercise":
 
     exercise = st.session_state.exercise
 
+    options = [
+        "Walking",
+        "Running",
+        "Gym",
+        "Yoga",
+        "Cycling",
+        "Dancing"
+    ]
+
     exercise_type = st.selectbox(
         "Exercise Type",
-        [
-            "Walking",
-            "Running",
-            "Gym",
-            "Yoga",
-            "Cycling",
-            "Dancing"
-        ],
+        options,
         index=(
-            [
-                "Walking",
-                "Running",
-                "Gym",
-                "Yoga",
-                "Cycling",
-                "Dancing"
-            ].index(exercise["type"])
-            if exercise["type"] in [
-                "Walking",
-                "Running",
-                "Gym",
-                "Yoga",
-                "Cycling",
-                "Dancing"
-            ]
+            options.index(exercise["type"])
+            if exercise["type"] in options
             else 0
         )
     )
@@ -541,18 +1026,40 @@ elif page == "🏋️ Exercise":
 
     if st.button("💗 Save Exercise"):
 
-        st.session_state.exercise = {
-            "type": exercise_type,
-            "duration": duration,
-            "calories": calories
-        }
+        try:
 
-        st.success("♡ Exercise saved successfully!")
+            user_id = get_user_id()
+
+            supabase.table("exercise").upsert(
+                {
+                    "user_id": user_id,
+                    "exercise_type": exercise_type,
+                    "duration": duration,
+                    "calories": calories
+                },
+                on_conflict="user_id"
+            ).execute()
+
+            st.session_state.exercise = {
+                "type": exercise_type,
+                "duration": duration,
+                "calories": calories
+            }
+
+            st.success(
+                "♡ Exercise saved permanently!"
+            )
+
+        except Exception as e:
+
+            st.error(
+                "Could not save exercise."
+            )
 
 
-# ==========================================
+# =========================================================
 # SLEEP
-# ==========================================
+# =========================================================
 
 elif page == "🌙 Sleep":
 
@@ -583,12 +1090,11 @@ elif page == "🌙 Sleep":
         "Poor"
     ]
 
-    if sleep["quality"] in quality_options:
-        quality_index = quality_options.index(
-            sleep["quality"]
-        )
-    else:
-        quality_index = 0
+    quality_index = (
+        quality_options.index(sleep["quality"])
+        if sleep["quality"] in quality_options
+        else 0
+    )
 
     quality = st.selectbox(
         "Sleep Quality",
@@ -598,17 +1104,38 @@ elif page == "🌙 Sleep":
 
     if st.button("💗 Save Sleep"):
 
-        st.session_state.sleep = {
-            "hours": hours,
-            "quality": quality
-        }
+        try:
 
-        st.success("♡ Sleep saved successfully!")
+            user_id = get_user_id()
+
+            supabase.table("sleep").upsert(
+                {
+                    "user_id": user_id,
+                    "hours": hours,
+                    "quality": quality
+                },
+                on_conflict="user_id"
+            ).execute()
+
+            st.session_state.sleep = {
+                "hours": hours,
+                "quality": quality
+            }
+
+            st.success(
+                "♡ Sleep saved permanently!"
+            )
+
+        except Exception as e:
+
+            st.error(
+                "Could not save sleep."
+            )
 
 
-# ==========================================
+# =========================================================
 # MOOD
-# ==========================================
+# =========================================================
 
 elif page == "😊 Mood":
 
@@ -635,12 +1162,11 @@ elif page == "😊 Mood":
         "🤩 Excited"
     ]
 
-    if mood["mood"] in mood_options:
-        mood_index = mood_options.index(
-            mood["mood"]
-        )
-    else:
-        mood_index = 0
+    mood_index = (
+        mood_options.index(mood["mood"])
+        if mood["mood"] in mood_options
+        else 0
+    )
 
     selected_mood = st.selectbox(
         "Today's Mood",
@@ -656,17 +1182,38 @@ elif page == "😊 Mood":
 
     if st.button("💗 Save Mood"):
 
-        st.session_state.mood = {
-            "mood": selected_mood,
-            "note": note
-        }
+        try:
 
-        st.success("♡ Mood saved successfully!")
+            user_id = get_user_id()
+
+            supabase.table("mood").upsert(
+                {
+                    "user_id": user_id,
+                    "mood": selected_mood,
+                    "note": note
+                },
+                on_conflict="user_id"
+            ).execute()
+
+            st.session_state.mood = {
+                "mood": selected_mood,
+                "note": note
+            }
+
+            st.success(
+                "♡ Mood saved permanently!"
+            )
+
+        except Exception as e:
+
+            st.error(
+                "Could not save mood."
+            )
 
 
-# ==========================================
+# =========================================================
 # PROGRESS
-# ==========================================
+# =========================================================
 
 elif page == "📊 My Progress":
 
@@ -677,8 +1224,6 @@ elif page == "📊 My Progress":
     )
 
     st.markdown("---")
-
-    # Calculate completed activities
 
     hydration_done = (
         st.session_state.water >= 8
@@ -719,10 +1264,6 @@ elif page == "📊 My Progress":
         (completed / total) * 100
     )
 
-    # ======================================
-    # SCORE
-    # ======================================
-
     st.markdown(
         f"""
         <div class="card">
@@ -738,109 +1279,80 @@ elif page == "📊 My Progress":
         percentage / 100
     )
 
-    st.write("")
-
-    # ======================================
-    # ACTIVITY CARDS
-    # ======================================
-
     col1, col2, col3 = st.columns(3)
 
-    with col1:
-
-        st.markdown(
-            f"""
-            <div class="small-card">
-                <h3>💧 Hydration</h3>
-                <p>{"✓ Completed" if hydration_done else "Not completed"}</p>
-                <p>{st.session_state.water}/8 glasses</p>
-            </div>
-            """,
-            unsafe_allow_html=True
+    cards = [
+        (
+            "💧",
+            "Hydration",
+            hydration_done,
+            f"{st.session_state.water}/8 glasses"
+        ),
+        (
+            "🧴",
+            "Skincare",
+            skincare_done,
+            ""
+        ),
+        (
+            "💆",
+            "Haircare",
+            haircare_done,
+            ""
+        ),
+        (
+            "🏋️",
+            "Exercise",
+            exercise_done,
+            f'{st.session_state.exercise["duration"]} minutes'
+        ),
+        (
+            "🌙",
+            "Sleep",
+            sleep_done,
+            f'{st.session_state.sleep["hours"]} hours'
+        ),
+        (
+            "😊",
+            "Mood",
+            mood_done,
+            st.session_state.mood["mood"]
         )
+    ]
 
-    with col2:
+    for i, (icon, title, done, detail) in enumerate(cards):
 
-        st.markdown(
-            f"""
-            <div class="small-card">
-                <h3>🧴 Skincare</h3>
-                <p>{"✓ Completed" if skincare_done else "Not completed"}</p>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
+        col = [
+            col1,
+            col2,
+            col3
+        ][i % 3]
 
-    with col3:
+        with col:
 
-        st.markdown(
-            f"""
-            <div class="small-card">
-                <h3>💆 Haircare</h3>
-                <p>{"✓ Completed" if haircare_done else "Not completed"}</p>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
+            status = (
+                "✓ Completed"
+                if done
+                else "Not completed"
+            )
 
-    st.write("")
+            st.markdown(
+                f"""
+                <div class="small-card">
 
-    col1, col2, col3 = st.columns(3)
+                    <h3>
+                    {icon} {title}
+                    </h3>
 
-    with col1:
+                    <p>
+                    {status}
+                    </p>
 
-        st.markdown(
-            f"""
-            <div class="small-card">
-                <h3>🏋️ Exercise</h3>
-                <p>{"✓ Completed" if exercise_done else "Not completed"}</p>
-                <p>{st.session_state.exercise["duration"]} minutes</p>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
+                    <p>
+                    {detail}
+                    </p>
 
-    with col2:
-
-        st.markdown(
-            f"""
-            <div class="small-card">
-                <h3>🌙 Sleep</h3>
-                <p>{"✓ Completed" if sleep_done else "Not completed"}</p>
-                <p>{st.session_state.sleep["hours"]} hours</p>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-
-    with col3:
-
-        st.markdown(
-            f"""
-            <div class="small-card">
-                <h3>😊 Mood</h3>
-                <p>{"✓ Completed" if mood_done else "Not completed"}</p>
-                <p>{st.session_state.mood["mood"]}</p>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-
-    st.write("")
-
-    # ======================================
-    # SUMMARY
-    # ======================================
-
-    st.markdown(
-        """
-        <div class="card">
-            <h2>✨ Keep Going</h2>
-            <p>
-            Every small step counts. Take care of yourself,
-            one day at a time. 🌷
-            </p>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
